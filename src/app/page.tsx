@@ -3,8 +3,8 @@ import Link from 'next/link';
 export default function Home() {
   return (
     <div className="container mx-auto p-6 text-center">
-      <h1 className="text-4xl font-bold mb-6 text-gray-300">Web Summarizer</h1>
-      <p className="text-lg text-gray-100 mb-8">
+      <h1 className="text-4xl font-bold mb-6">Web Summarizer</h1>
+      <p className="text-lg mb-8">
         Веб-приложение для суммаризации текста и веб-страниц
       </p>
       
@@ -27,7 +27,7 @@ export default function Home() {
       </div>
 
       <div className="mt-12">
-        <h3 className="text-xl font-semibold mb-4 text-gray-300">Доступные API маршруты:</h3>
+        <h3 className="text-xl font-semibold mb-4">Доступные API маршруты:</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-3xl mx-auto">
           <div className="bg-gray-50 p-4 rounded">
             <h4 className="font-medium">GET запросы</h4>

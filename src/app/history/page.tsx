@@ -10,7 +10,7 @@ const mockHistory = [
 export default function HistoryPage() {
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-300">История суммаризаций</h1>
+      <h1 className="text-3xl font-bold mb-6">История суммаризаций</h1>
       
       <div className="mb-6">
         <Link 

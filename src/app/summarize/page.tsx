@@ -1,74 +1,154 @@
-import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 export default function SummarizePage() {
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6 text-gray-300">Суммаризатор текста</h1>
-      
-      <div className="mb-6">
-        <Link 
-          href="/" 
-          className="text-blue-600 hover:text-blue-800"
-        >
-          ← На главную
-        </Link>
+    <div className="container mx-auto py-8">
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold tracking-tight">Суммаризация контента</h1>
+        <p className="text-muted-foreground mt-2">
+          Вставьте текст или URL для создания краткого содержания
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {/* Форма для ввода */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4">Введите текст или URL</h2>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block mb-2">URL веб-страницы:</label>
-              <input 
-                type="text" 
-                placeholder="https://example.com/article"
-                className="w-full p-3 border rounded"
-              />
-            </div>
-            
-            <div>
-              <label className="block mb-2">Или введите текст:</label>
-              <textarea 
-                placeholder="Вставьте текст для суммаризации..."
-                className="w-full p-3 border rounded h-40"
-              />
-            </div>
-            
-            <div>
-              <label className="block mb-2">Длина суммаризации:</label>
-              <select className="w-full p-3 border rounded">
-                <option value="short">Короткая (1-2 предложения)</option>
-                <option value="medium">Средняя (3-5 предложений)</option>
-                <option value="long">Длинная (6-10 предложений)</option>
-              </select>
-            </div>
-            
-            <button className="w-full bg-blue-600 text-white p-3 rounded hover:bg-blue-700">
-              Суммаризировать
-            </button>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        {/* Левая колонка - Форма ввода */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Исходный контент</CardTitle>
+            <CardDescription>
+              Выберите источник для суммаризации
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <Tabs defaultValue="text" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="text">Текст</TabsTrigger>
+                <TabsTrigger value="url">URL веб-страницы</TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="text" className="space-y-4">
+                <Label htmlFor="text-input">Текст для суммаризации</Label>
+                <Textarea 
+                  id="text-input"
+                  placeholder="Вставьте сюда текст, который нужно сократить..."
+                  className="min-h-[200px]"
+                />
+              </TabsContent>
+              
+              <TabsContent value="url" className="space-y-4">
+                <Label htmlFor="url-input">Адрес веб-страницы</Label>
+                <Input 
+                  id="url-input"
+                  placeholder="https://example.com/article"
+                  type="url"
+                />
+              </TabsContent>
+            </Tabs>
 
-        {/* Область результата */}
-        <div className="bg-white p-6 rounded-lg shadow-md">
-          <h2 className="text-xl font-semibold mb-4">Результат суммаризации</h2>
-          <div className="p-4 bg-gray-50 rounded min-h-[300px]">
-            <p className="text-gray-500">Здесь появится краткое содержание...</p>
-          </div>
-          
-          <div className="mt-4 flex gap-4">
-            <button className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
-              Сохранить
-            </button>
-            <button className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">
+            <div className="space-y-4">
+              <Label>Настройки суммаризации</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="length">Длина</Label>
+                  <Select defaultValue="medium">
+                    <SelectTrigger id="length">
+                      <SelectValue placeholder="Выберите длину" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="short">Короткая</SelectItem>
+                      <SelectItem value="medium">Средняя</SelectItem>
+                      <SelectItem value="long">Длинная</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="format">Формат</Label>
+                  <Select defaultValue="paragraph">
+                    <SelectTrigger id="format">
+                      <SelectValue placeholder="Выберите формат" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="paragraph">Абзац</SelectItem>
+                      <SelectItem value="bullet">Список</SelectItem>
+                      <SelectItem value="headlines">Заголовки</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button className="w-full" size="lg">
+              <span className="mr-2"></span>
+              Создать суммаризацию
+            </Button>
+          </CardFooter>
+        </Card>
+
+        {/* Правая колонка - Результат */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Результат суммаризации</CardTitle>
+            <CardDescription>
+              Краткое содержание появится здесь
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-lg border p-6 min-h-[300px] bg-muted/50">
+              <p className="text-muted-foreground text-center py-12">
+                Начните с ввода текста или URL и нажмите &quot;Создать суммаризацию&quot;
+              </p>
+            </div>
+          </CardContent>
+          <CardFooter className="flex justify-between">
+            <Button variant="outline" disabled>
               Копировать
-            </button>
-          </div>
-        </div>
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline">
+                Сохранить черновик
+              </Button>
+              <Button>
+                Экспортировать
+              </Button>
+            </div>
+          </CardFooter>
+        </Card>
       </div>
+
+      {/* Дополнительная информация */}
+      <Card className="mt-8">
+        <CardHeader>
+          <CardTitle>Советы по эффективной суммаризации</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-2">
+            <h4 className="font-semibold">Чистый текст</h4>
+            <p className="text-sm text-muted-foreground">
+              Удалите лишние форматирование для лучшего результата
+            </p>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-semibold">Быстрая обработка</h4>
+            <p className="text-sm text-muted-foreground">
+              Короткие тексты обрабатываются быстрее
+            </p>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-semibold">Точность</h4>
+            <p className="text-sm text-muted-foreground">
+              Выберите подходящую длину для ваших нужд
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { Header } from '@/components/layout/header';
+import { Footer } from '@/components/layout/footer';
 import './globals.css';
-import Link from 'next/link';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -16,32 +17,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="ru">
-      <body className={inter.className}>
-        <header className="bg-gray-800 text-white p-4">
-          <div className="container mx-auto flex justify-between items-center">
-            <Link href="/" className="text-xl font-bold">
-              Web Summarizer
-            </Link>
-            <nav>
-              <Link href="/" className="mr-4 hover:text-gray-300">
-                Главная
-              </Link>
-              <Link href="/summarize" className="mr-4 hover:text-gray-300">
-                Суммаризация
-              </Link>
-              <Link href="/history" className="hover:text-gray-300">
-                История
-              </Link>
-            </nav>
-          </div>
-        </header>
-        <main>{children}</main>
-        <footer className="bg-gray-100 p-4 mt-8">
-          <div className="container mx-auto text-center text-gray-800">
-            © 2025 Web Summarizer. Все права защищены.
-          </div>
-        </footer>
+    <html lang="ru" suppressHydrationWarning>
+      <body className={`${inter.className} min-h-screen flex flex-col`}>
+        <Header />
+        <main className="flex-1 container mx-auto px-4 py-8">
+          {children}
+        </main>
+        <Footer />
       </body>
     </html>
   );

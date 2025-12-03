@@ -9,6 +9,53 @@ import ffmpeg
 from faster_whisper import WhisperModel
 from transformers import pipeline
 import torch
+import requests
+from bs4 import BeautifulSoup
+import re
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+def extract_text_from_url(url: str) -> str:
+    """
+    Извлекает чистый текст из веб-страницы по URL.
+    """
+    try:
+        # 1. Отправляем запрос к странице
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()  # Проверяем на ошибки HTTP
+
+        # 2. Парсим HTML с помощью BeautifulSoup
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        # 3. Удаляем ненужные элементы (скрипты, стили, навигация)
+        for script in soup(["script", "style", "nav", "footer", "header"]):
+            script.decompose()
+
+        # 4. Извлекаем текст, например, из основного контента (<article>, <main>) или всего <body>
+        main_content = soup.find('article') or soup.find('main') or soup.find('body')
+        if main_content:
+            text = main_content.get_text(separator=' ', strip=True)
+        else:
+            text = soup.get_text(separator=' ', strip=True)
+
+        # 5. Очищаем текст от лишних пробелов и переносов
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
+    except requests.exceptions.RequestException as e:
+        print(f"Ошибка при загрузке страницы {url}: {e}")
+        return ""
+    except Exception as e:
+        print(f"Ошибка при парсинге страницы {url}: {e}")
+        return ""
 
 # Функция для скачивания видео (как в ноутбуке)
 def download_video(url: str, out_dir: str = None) -> Path:
@@ -279,6 +326,51 @@ def summarize_text_pipeline(text: str) -> Dict[str, Any]:
             "error": str(e),
             "summary": "",
             "original_length": len(text),
+            "summary_length": 0,
+            "processing_time": time.time() - start_time,
+            "status": "error"
+        }
+    
+def summarize_webpage_pipeline(url: str) -> Dict[str, Any]:
+    """
+    Полный пайплайн: скачивание страницы -> извлечение текста -> суммаризация.
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"Начало обработки веб-страницы: {url}")
+
+        # 1. Извлечь текст
+        logger.info("Извлечение текста со страницы...")
+        text = extract_text_from_url(url)
+
+        if not text:
+            return {
+                "error": "Не удалось извлечь текст со страницы",
+                "summary": "",
+                "original_length": 0,
+                "summary_length": 0,
+                "processing_time": time.time() - start_time,
+                "status": "error"
+            }
+
+        logger.info(f"Извлечено {len(text)} символов")
+
+        logger.info("Запуск суммаризации текста...")
+        result = summarize_text_pipeline(text)
+
+        # 3. Добавить исходный URL в результат
+        result["source_url"] = url
+
+        logger.info(f"Пайплайн для веб-страницы завершен за {result['processing_time']:.2f} секунд")
+        return result
+
+    except Exception as e:
+        logger.error(f"Ошибка в пайплайне для веб-страницы: {e}", exc_info=True)
+        return {
+            "error": str(e),
+            "summary": "",
+            "original_length": 0,
             "summary_length": 0,
             "processing_time": time.time() - start_time,
             "status": "error"

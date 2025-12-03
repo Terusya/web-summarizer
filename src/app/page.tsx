@@ -1,13 +1,73 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { ArrowRight, Video, FileText } from 'lucide-react';
+import { ArrowRight, Video, FileText, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { useSummarization } from '@/app/contexts/SummarizationContext';
+import { useRouter } from 'next/navigation';
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState('video');
+  const [videoUrl, setVideoUrl] = useState('');
+  const [textInput, setTextInput] = useState('');
+  const [webUrl, setWebUrl] = useState('');
+  const { startSummarization, isProcessing } = useSummarization();
+  const router = useRouter();
+
+  const handleSubmit = async () => {
+  try {
+    let content = '';
+    let type: 'video' | 'text' | 'webpage' = 'video';
+    
+    if (activeTab === 'video') {
+      if (!videoUrl.trim()) {
+        toast.error('Введите URL видео');
+        return;
+      }
+      content = videoUrl;
+      type = 'video';
+    } else if (activeTab === 'text') {
+      if (!textInput.trim()) {
+        toast.error('Введите текст для суммаризации');
+        return;
+      }
+      content = textInput;
+      type = 'text';
+    } else if (activeTab === 'url') {
+      if (!webUrl.trim()) {
+        toast.error('Введите URL веб-страницы');
+        return;
+      }
+      content = webUrl;
+      type = 'webpage';
+    }
+    
+    // Разные сообщения для разных типов
+    const loadingMessages = {
+      video: 'Создание задачи суммаризации видео... (это может занять несколько минут)',
+      text: 'Создание задачи суммаризации текста...',
+      webpage: 'Создание задачи суммаризации веб-страницы...'
+    };
+    
+    toast.info(loadingMessages[type]);
+    const taskId = await startSummarization(type, content);
+    
+    // Перенаправляем на страницу отслеживания
+    router.push(`/summarize?taskId=${taskId}`);
+    toast.success('Задача создана! Отслеживайте прогресс на следующей странице');
+    
+  } catch (error: any) {
+    toast.error(`Ошибка: ${error.message || 'Не удалось создать задачу'}`);
+  }
+};
+
   return (
     <div className="container mx-auto py-12 px-4">
       <div className="text-center mb-10">
@@ -29,7 +89,7 @@ export default function Home() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="video" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-3">
                 <TabsTrigger value="video" className="flex items-center gap-2">
                   <Video className="h-4 w-4" />
@@ -52,6 +112,9 @@ export default function Home() {
                     id="video-url"
                     placeholder="https://www.youtube.com/watch?v=..."
                     type="url"
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    disabled={isProcessing}
                   />
                 </div>
                 <p className="text-sm text-muted-foreground">
@@ -66,6 +129,9 @@ export default function Home() {
                     id="text-input"
                     placeholder="Вставьте сюда текст, который нужно сократить..."
                     className="min-h-[200px]"
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    disabled={isProcessing}
                   />
                 </div>
               </TabsContent>
@@ -77,8 +143,14 @@ export default function Home() {
                     id="web-url"
                     placeholder="https://example.com/article"
                     type="url"
+                    value={webUrl}
+                    onChange={(e) => setWebUrl(e.target.value)}
+                    disabled={isProcessing}
                   />
                 </div>
+                <p className="text-sm text-muted-foreground">
+                  Поддерживаются статьи, блоги, новостные сайты и другие веб-страницы
+                </p>
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -88,11 +160,21 @@ export default function Home() {
                 Смотреть историю
               </Link>
             </Button>
-            <Button asChild>
-              <Link href="/summarize">
-                Продолжить к суммаризации
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
+            <Button 
+              onClick={handleSubmit}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Создание задачи...
+                </>
+              ) : (
+                <>
+                  Создать суммаризацию
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </>
+              )}
             </Button>
           </CardFooter>
         </Card>

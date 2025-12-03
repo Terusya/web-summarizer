@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime
 import uuid
 
-from pipeline import summarize_video_pipeline, summarize_text_pipeline
+from pipeline import summarize_video_pipeline, summarize_text_pipeline, summarize_webpage_pipeline
 from database import save_request_to_db, init_db
 
 app = FastAPI(title="Video Summarizer API", version="1.0.0")
@@ -81,6 +81,38 @@ async def summarize_text(request: TextRequest):
             "processing_time": result["processing_time"]
         }
         
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/summarize/webpage")
+async def summarize_webpage(request: TextRequest):  # Можно использовать тот же TextRequest
+    """Эндпоинт для суммаризации веб-страницы по URL"""
+    try:
+        request_id = str(uuid.uuid4())
+
+        save_request_to_db(
+            request_id=request_id,
+            user_id=request.user_id,
+            request_type="webpage",
+            content_preview=request.text[:100]  # URL сохранится здесь
+        )
+
+        # Важно: ожидаем, что в поле `text` придет URL
+        result = summarize_webpage_pipeline(request.text)
+
+        if result.get("status") == "error":
+            raise HTTPException(status_code=400, detail=result.get("error", "Ошибка обработки"))
+
+        return {
+            "request_id": request_id,
+            "status": "success",
+            "summary": result["summary"],
+            "original_length": result["original_length"],
+            "summary_length": result["summary_length"],
+            "processing_time": result["processing_time"],
+            "source_url": result.get("source_url", request.text)
+        }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

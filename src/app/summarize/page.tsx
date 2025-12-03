@@ -5,95 +5,238 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Copy, Download, Save, Share2, Clock, FileText, Video, Globe } from 'lucide-react';
+import { Copy, Download, FileText, Video, Globe, Clock, Loader2, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { toast } from 'sonner'; // Импортируем toast из sonner
-
-// ... (остальные импорты остаются без изменений)
+import { toast } from 'sonner';
+import { useSummarization } from '@/app/contexts/SummarizationContext';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 export default function SummarizePage() {
-  const [activeTab, setActiveTab] = useState('text');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const taskId = searchParams.get('taskId');
+  const { tasks, startSummarization, isProcessing } = useSummarization();
   
-  // ДОБАВЛЯЕМ: состояния для ввода данных
+  const [activeTab, setActiveTab] = useState('text');
   const [textInput, setTextInput] = useState('');
   const [urlInput, setUrlInput] = useState('');
-  const [summaryResult, setSummaryResult] = useState<any>(null);
+  const [isStarting, setIsStarting] = useState(false);
+  const [result, setResult] = useState<any>(null);
+  const [isLoadingResult, setIsLoadingResult] = useState(false);
   
-  // ДОБАВЛЯЕМ: функция обработки отправки формы
-  const handleSubmit = async () => {
-    if (activeTab === 'text' && !textInput.trim()) {
-      toast.error('Введите текст для суммаризации');
-      return;
-    }
-    
-    if (activeTab === 'url' && !urlInput.trim()) {
-      toast.error('Введите URL веб-страницы');
-      return;
-    }
-    
-    setIsProcessing(true);
-    setProgress(0);
-    setSummaryResult(null);
-    
-    // Имитация прогресса
-    const progressInterval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(progressInterval);
-          return 90;
-        }
-        return prev + 10;
-      });
-    }, 300);
+  const currentTask = taskId ? tasks[taskId] : null;
+
+  // Функция для загрузки результата
+  const loadResult = async (id: string) => {
+    if (!id) return;
     
     try {
-      // ЗАГЛУШКА: В задании 6 пока используем мок-данные
-      // В задании 7 здесь будет реальный запрос к API
-      
-      // Имитация задержки API
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Мок-результат в зависимости от типа контента
-      const mockResult = {
-        id: Date.now().toString(),
-        title: activeTab === 'text' 
-          ? 'Суммаризация текста' 
-          : `Анализ веб-страницы: ${urlInput.substring(0, 30)}...`,
-        summary: activeTab === 'text'
-          ? `Сжатая версия вашего текста: "${textInput.substring(0, 100)}..."`
-          : `Краткое содержание страницы ${urlInput}: Веб-страница содержит информацию о...`,
-        originalLength: activeTab === 'text' ? textInput.length : 1200,
-        summaryLength: activeTab === 'text' ? Math.min(200, textInput.length) : 350,
-        type: activeTab === 'text' ? 'text' : 'webpage',
-        date: new Date().toISOString(),
-        status: 'completed',
-        sourceUrl: activeTab === 'url' ? urlInput : undefined,
-      };
-      
-      setSummaryResult(mockResult);
-      setProgress(100);
-      
-      toast.success('Суммаризация завершена!');
-      
+      setIsLoadingResult(true);
+      const response = await fetch(`/api/summarize/${id}/status`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'completed' && data.summary) {
+          setResult(data);
+          toast.success('Результат загружен!');
+        } else if (data.status === 'failed') {
+          toast.error('Задача завершилась с ошибкой');
+        }
+      }
     } catch (error) {
-      toast.error('Ошибка при обработке запроса');
-      console.error(error);
+      console.error('Ошибка при загрузке результата:', error);
     } finally {
-      clearInterval(progressInterval);
-      setTimeout(() => setIsProcessing(false), 500);
+      setIsLoadingResult(false);
     }
   };
 
-  // Остальная часть компонента остается похожей, но с использованием summaryResult
-  // Вот ключевые изменения в JSX:
+  // Проверяем результат при загрузке страницы
+  useEffect(() => {
+    if (taskId) {
+      loadResult(taskId);
+      
+      // Настраиваем интервал для проверки статуса, если задача еще не завершена
+      const interval = setInterval(() => {
+        fetch(`/api/summarize/${taskId}/status`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.status === 'completed' && data.summary) {
+              setResult(data);
+              clearInterval(interval);
+              toast.success('Обработка завершена!');
+            }
+          })
+          .catch(console.error);
+      }, 3000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [taskId]);
 
+  const handleSubmit = async () => {
+    try {
+      setIsStarting(true);
+      
+      let content = '';
+      let type: 'text' | 'video' | 'webpage' = 'text';
+      
+      if (activeTab === 'text') {
+        if (!textInput.trim()) {
+          toast.error('Введите текст для суммаризации');
+          setIsStarting(false);
+          return;
+        }
+        content = textInput;
+        type = 'text';
+      } else if (activeTab === 'url') {
+        if (!urlInput.trim()) {
+          toast.error('Введите URL веб-страницы');
+          setIsStarting(false);
+          return;
+        }
+        content = urlInput;
+        type = 'webpage';
+      } else if (activeTab === 'video') {
+        if (!urlInput.trim()) {
+          toast.error('Введите URL видео');
+          setIsStarting(false);
+          return;
+        }
+        content = urlInput;
+        type = 'video';
+      }
+      
+      toast.info('Создание задачи суммаризации...');
+      const newTaskId = await startSummarization(type, content);
+      
+      // Перенаправляем на страницу с taskId
+      router.push(`/summarize?taskId=${newTaskId}`);
+      toast.success('Задача создана! Следите за прогрессом...');
+      
+    } catch (error: any) {
+      toast.error(`Ошибка: ${error.message || 'Не удалось создать задачу'}`);
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  // Если есть результат, показываем его
+  if (result) {
+    return (
+      <div className="container mx-auto py-8">
+        <Button 
+          variant="outline" 
+          onClick={() => {
+            setResult(null);
+            router.push('/summarize');
+          }}
+          className="mb-6"
+        >
+          ← Новая суммаризация
+        </Button>
+        
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Результат суммаризации</CardTitle>
+                <CardDescription>
+                  {result.type === 'webpage' ? 'Веб-страница' : 
+                   result.type === 'video' ? 'Видео' : 'Текст'}
+                </CardDescription>
+              </div>
+              <Badge variant="outline" className="bg-green-50 text-green-700">
+                Завершено
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="rounded-lg border p-6 bg-muted/50">
+              <p className="whitespace-pre-wrap">{result.summary}</p>
+            </div>
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <div className="flex items-center gap-4">
+                <span className="flex items-center gap-1">
+                  <FileText className="h-4 w-4" />
+                  {result.summary_length} символов
+                </span>
+                <span className="flex items-center gap-1">
+                  <Clock className="h-4 w-4" />
+                  Сокращено на {Math.round((1 - (result.summary_length || 0) / (result.original_length || 1)) * 100)}%
+                </span>
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter className="flex justify-between">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                navigator.clipboard.writeText(result.summary || '');
+                toast.success('Текст скопирован в буфер');
+              }}
+            >
+              <Copy className="mr-2 h-4 w-4" />
+              Копировать
+            </Button>
+            <Button>
+              <Download className="mr-2 h-4 w-4" />
+              Экспортировать
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  // Если задача в процессе, показываем индикатор
+  if (taskId && (currentTask?.status === 'processing' || currentTask?.status === 'pending')) {
+    return (
+      <div className="container mx-auto py-8">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Обработка...
+            </CardTitle>
+            <CardDescription>
+              {currentTask.type === 'video' ? 'Обработка видео' : 
+               currentTask.type === 'webpage' ? 'Анализ веб-страницы' : 'Обработка текста'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Progress value={50} className="h-2" />
+            <div className="text-center">
+              <p className="text-muted-foreground">
+                Пожалуйста, подождите. Это может занять несколько минут.
+              </p>
+              <p className="text-sm text-muted-foreground mt-2">
+                ID задачи: {taskId.substring(0, 8)}...
+              </p>
+            </div>
+            <div className="flex justify-center">
+              <Button 
+                variant="outline" 
+                onClick={() => loadResult(taskId)}
+                disabled={isLoadingResult}
+              >
+                {isLoadingResult ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                <span className="ml-2">Проверить статус</span>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Основная форма
   return (
     <div className="container mx-auto py-8">
       <div className="mb-8">
@@ -101,19 +244,14 @@ export default function SummarizePage() {
           <div>
             <h1 className="text-4xl font-bold tracking-tight">Суммаризация контента</h1>
             <p className="text-muted-foreground mt-2">
-              {summaryResult 
-                ? `Результат суммаризации ${summaryResult.type === 'webpage' ? 'веб-страницы' : 'текста'}`
-                : 'Вставьте текст или URL для создания краткого содержания'}
+              Вставьте текст или URL для создания краткого содержания
             </p>
           </div>
-          <Button onClick={handleSubmit} disabled={isProcessing}>
-            {isProcessing ? 'Обработка...' : 'Создать суммаризацию'}
-          </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Левая колонка - Форма ввода (ОБНОВЛЯЕМ) */}
+        {/* Левая колонка - Форма ввода */}
         <div className="lg:col-span-1">
           <Card>
             <CardHeader>
@@ -124,9 +262,10 @@ export default function SummarizePage() {
             </CardHeader>
             <CardContent className="space-y-6">
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2">
+                <TabsList className="grid w-full grid-cols-3">
                   <TabsTrigger value="text">Текст</TabsTrigger>
-                  <TabsTrigger value="url">URL веб-страницы</TabsTrigger>
+                  <TabsTrigger value="url">Веб-страница</TabsTrigger>
+                  <TabsTrigger value="video">Видео</TabsTrigger>
                 </TabsList>
                 
                 <TabsContent value="text" className="space-y-4">
@@ -137,7 +276,7 @@ export default function SummarizePage() {
                     className="min-h-[200px]"
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
-                    disabled={isProcessing}
+                    disabled={isStarting || isProcessing}
                   />
                 </TabsContent>
                 
@@ -149,220 +288,113 @@ export default function SummarizePage() {
                     type="url"
                     value={urlInput}
                     onChange={(e) => setUrlInput(e.target.value)}
-                    disabled={isProcessing}
+                    disabled={isStarting || isProcessing}
                   />
                   <p className="text-sm text-muted-foreground">
                     Поддерживаются статьи, блоги, новостные сайты
                   </p>
                 </TabsContent>
+                
+                <TabsContent value="video" className="space-y-4">
+                  <Label htmlFor="video-input">URL видео</Label>
+                  <Input 
+                    id="video-input"
+                    placeholder="https://youtube.com/watch?v=..."
+                    type="url"
+                    value={urlInput}
+                    onChange={(e) => setUrlInput(e.target.value)}
+                    disabled={isStarting || isProcessing}
+                  />
+                  <p className="text-sm text-muted-foreground">
+                    Поддерживаются YouTube, Vimeo и другие платформы
+                  </p>
+                </TabsContent>
               </Tabs>
-
-              <div className="space-y-4">
-                <Label>Настройки суммаризации</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="length">Длина</Label>
-                    <Select defaultValue="medium" disabled={isProcessing}>
-                      <SelectTrigger id="length">
-                        <SelectValue placeholder="Выберите длину" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="short">Короткая</SelectItem>
-                        <SelectItem value="medium">Средняя</SelectItem>
-                        <SelectItem value="long">Длинная</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="format">Формат</Label>
-                    <Select defaultValue="paragraph" disabled={isProcessing}>
-                      <SelectTrigger id="format">
-                        <SelectValue placeholder="Выберите формат" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="paragraph">Абзац</SelectItem>
-                        <SelectItem value="bullet">Список</SelectItem>
-                        <SelectItem value="headlines">Заголовки</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
             </CardContent>
             <CardFooter>
               <Button 
                 className="w-full" 
                 size="lg" 
                 onClick={handleSubmit}
-                disabled={isProcessing}
+                disabled={isStarting || isProcessing}
               >
-                {isProcessing ? 'Обработка...' : 'Создать суммаризацию'}
+                {isStarting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Создание задачи...
+                  </>
+                ) : isProcessing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Обработка...
+                  </>
+                ) : (
+                  'Создать суммаризацию'
+                )}
               </Button>
             </CardFooter>
           </Card>
-
-          {/* Блок прогресса (показывается только при обработке) */}
-          {isProcessing && (
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle className="text-lg">Обработка</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Progress value={progress} className="w-full" />
-                <div className="flex justify-between text-sm text-muted-foreground">
-                  <span>{progress}% завершено</span>
-                  <span>
-                    {activeTab === 'text' ? 'Анализ текста...' : 'Загрузка страницы...'}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          )}
         </div>
 
-        {/* Правая колонка - Результат (ОБНОВЛЯЕМ) */}
+        {/* Правая колонка - Инструкция */}
         <div className="lg:col-span-2">
-          {isProcessing ? (
-            // Скелетон загрузки
-            <Card>
-              <CardHeader>
-                <Skeleton className="h-8 w-48" />
-                <Skeleton className="h-4 w-64" />
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <Skeleton className="h-48 w-full" />
-                <div className="flex gap-4">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-4 w-32" />
+          <Card>
+            <CardHeader>
+              <CardTitle>Как это работает</CardTitle>
+              <CardDescription>
+                Процесс суммаризации состоит из нескольких этапов
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 p-2 rounded-md">
+                    <FileText className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">1. Ввод контента</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Загрузите текст, URL веб-страницы или ссылку на видео
+                    </p>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          ) : summaryResult ? (
-            // Результат суммаризации
-            <>
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>{summaryResult.title}</CardTitle>
-                      <CardDescription>
-                        {summaryResult.type === 'webpage' ? (
-                          <div className="flex items-center gap-2 mt-1">
-                            <Globe className="h-4 w-4" />
-                            <a 
-                              href={summaryResult.sourceUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              {summaryResult.sourceUrl}
-                            </a>
-                          </div>
-                        ) : (
-                          `Суммаризация текста`
-                        )}
-                      </CardDescription>
-                    </div>
-                    <Badge variant="outline">
-                      {summaryResult.type === 'webpage' ? 'Веб-страница' : 'Текст'}
-                    </Badge>
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 p-2 rounded-md">
+                    <Loader2 className="h-5 w-5 text-primary" />
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="rounded-lg border p-6 bg-muted/50">
-                    <p className="whitespace-pre-wrap">{summaryResult.summary}</p>
+                  <div>
+                    <h3 className="font-semibold">2. Обработка ИИ</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Наш ИИ анализирует контент и выделяет ключевые моменты.
+                      Это может занять от нескольких секунд до нескольких минут.
+                    </p>
                   </div>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <div className="flex items-center gap-4">
-                      <span className="flex items-center gap-1">
-                        <FileText className="h-4 w-4" />
-                        {summaryResult.summaryLength} символов
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        Чтение за {Math.ceil(summaryResult.summaryLength / 1000)} мин
-                      </span>
-                    </div>
-                    <Badge variant="outline">
-                      Сокращено на {Math.round((1 - summaryResult.summaryLength / summaryResult.originalLength) * 100)}%
-                    </Badge>
-                  </div>
-                </CardContent>
-                <CardFooter className="flex justify-between">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => {
-                      navigator.clipboard.writeText(summaryResult.summary);
-                      toast.success('Текст скопирован в буфер');
-                    }}
-                  >
-                    <Copy className="mr-2 h-4 w-4" />
-                    Копировать
-                  </Button>
-                  <div className="flex gap-2">
-                    <Button variant="outline">
-                      <Save className="mr-2 h-4 w-4" />
-                      Сохранить
-                    </Button>
-                    <Button>
-                      <Download className="mr-2 h-4 w-4" />
-                      Экспортировать
-                    </Button>
-                  </div>
-                </CardFooter>
-              </Card>
-
-              {/* Карточка со статистикой */}
-              <Card className="mt-6">
-                <CardHeader>
-                  <CardTitle>Статистика</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Исходный размер</p>
-                      <p className="text-2xl font-bold">{summaryResult.originalLength}</p>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Результат</p>
-                      <p className="text-2xl font-bold">{summaryResult.summaryLength}</p>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Экономия</p>
-                      <p className="text-2xl font-bold text-green-600">
-                        {summaryResult.originalLength - summaryResult.summaryLength}
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <p className="text-sm text-muted-foreground">Коэффициент</p>
-                      <p className="text-2xl font-bold">
-                        {(summaryResult.originalLength / summaryResult.summaryLength).toFixed(1)}:1
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </>
-          ) : (
-            // Пустое состояние
-            <Card>
-              <CardHeader>
-                <CardTitle>Результат суммаризации</CardTitle>
-                <CardDescription>
-                  Краткое содержание появится здесь
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="rounded-lg border p-12 bg-muted/50 flex flex-col items-center justify-center">
-                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground text-center">
-                    Начните с ввода текста или URL и нажмите &quot;Создать суммаризацию&quot;
-                  </p>
                 </div>
-              </CardContent>
-            </Card>
-          )}
+                <div className="flex items-start gap-3">
+                  <div className="bg-primary/10 p-2 rounded-md">
+                    <Download className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">3. Получение результата</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Получите краткое содержание в удобном формате.
+                      Вы сможете скопировать или экспортировать результат.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-blue-800 mb-1">
+                  💡 Совет
+                </p>
+                <p className="text-xs text-blue-700">
+                  После создания задачи не закрывайте страницу. Система автоматически обновит статус.
+                  Вы также можете перейти в историю и вернуться к задаче позже.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>
